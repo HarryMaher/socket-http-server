@@ -1,5 +1,6 @@
 import socket
 import sys
+import os
 
 def response_ok(body=b"This is a minimal response", mimetype=b"text/plain"):
     """
@@ -17,7 +18,12 @@ def response_ok(body=b"This is a minimal response", mimetype=b"text/plain"):
         <html><h1>Welcome:</h1></html>\r\n
         '''
     """
-    pass
+    return b"\r\n".join([
+        b'HTTP/1.1 200 OK',
+        b'Content-Type:' + mimetype,
+        b'',
+        body
+        ])
 
 
 def parse_request(request):
@@ -27,17 +33,33 @@ def parse_request(request):
     This server only handles GET requests, so this method shall raise a
     NotImplementedError if the method of the request is not GET.
     """
-    pass
+    method, path, version = request.split("\r\n")[0].split(" ")
+
+    if method != "GET":
+        raise NotImplementedError
+
+    return path
 
 
 def response_method_not_allowed():
     """Returns a 405 Method Not Allowed response"""
-    pass
+    return b"\r\n".join([
+        b"HTTP/1.1 405 Method Not Allowed",
+        b'Content-Type: text/plain',
+        b"",
+        b"Noooooo you messed up!!!"
+        ])
 
 
 def response_not_found():
     """Returns a 404 Not Found response"""
-    pass
+    return b"\r\n".join([
+        b"HTTP/1.1 404 Page Not Found",
+        b'Content-Type: text/plain',
+        b"",
+        b"404! Pg not found",
+        b"You messed up."
+        ])
     
 
 def resolve_uri(uri):
@@ -67,15 +89,38 @@ def resolve_uri(uri):
         resolve_uri('/a_page_that_doesnt_exist.html') -> Raises a NameError
 
     """
+    
 
-    # TODO: Raise a NameError if the requested content is not present
-    # under webroot.
+    # try:
+    #     print(os.listdir('./webroot/'+uri))
+    # except FileNotFoundError:
+    #     raise NameError
+    mime_type = b"text/plain"
+    if uri.endswith(".html") or uri.endswith('.htm'):
+        mime_type = b"text/html"
+    if uri.endswith(".txt"):
+        mime_type = b"text/plain"
+    if uri.endswith(".png"):
+        mime_type = b"image/png"
+    if uri.endswith(".jpg"):
+        mime_type = b"image/jpg"
+
+    content = b"this is the content holder:" + uri.encode()
+
+    try:
+        with open('./webroot' + uri, "rb") as fh:
+            content = fh.read()
+    except IsADirectoryError:
+        content = "\r\n".join(os.listdir('./webroot'+uri)).encode()
+    except FileNotFoundError:
+        raise NameError
+
 
     # TODO: Fill in the appropriate content and mime_type give the URI.
     # See the assignment guidelines for help on "mapping mime-types", though
     # you might need to create a special case for handling make_time.py
-    content = b"not implemented"
-    mime_type = b"not implemented"
+    # content = b"not implemented"
+    # mime_type = b"not implemented"
 
     return content, mime_type
 
@@ -94,16 +139,32 @@ def server(log_buffer=sys.stderr):
             conn, addr = sock.accept()  # blocking
             try:
                 print('connection - {0}:{1}'.format(*addr), file=log_buffer)
+                request = ''
                 while True:
-                    data = conn.recv(16)
-                    print('received "{0}"'.format(data), file=log_buffer)
-                    if data:
-                        print('sending data back to client', file=log_buffer)
-                        conn.sendall(data)
-                    else:
-                        msg = 'no more data from {0}:{1}'.format(*addr)
-                        print(msg, log_buffer)
+                    data = conn.recv(1024)
+                    request += data.decode('utf8')
+
+                    if '\r\n\r\n' in request:
                         break
+                
+                print('Request received:\n"{}"\n\n'.format(request))
+                response = ''
+                try:
+                    path = parse_request(request)
+                except NotImplementedError:
+                    response = response_method_not_allowed()
+                try:
+                    content, mime = resolve_uri(path)
+                except NameError:
+                    response = response_not_found()
+                
+                if not len(response):
+                    print(f"path:{path}\content: {content}\nmime:{mime}")
+                    response = response_ok(
+                        body = content, #b"welcome to server on: " + path.encode(),
+                        mimetype = mime
+                        )
+                conn.sendall(response)
             finally:
                 conn.close()
 
@@ -115,5 +176,4 @@ def server(log_buffer=sys.stderr):
 if __name__ == '__main__':
     server()
     sys.exit(0)
-
 
