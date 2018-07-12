@@ -103,7 +103,7 @@ def resolve_uri(uri):
     if uri.endswith(".png"):
         mime_type = b"image/png"
     if uri.endswith(".jpg"):
-        mime_type = b"image/jpg"
+        mime_type = b"image/jpeg"
 
     content = b"this is the content holder:" + uri.encode()
 
